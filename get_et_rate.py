@@ -24,7 +24,7 @@ def main():
   exit(0)
 
 def yesterday():
-  dt = datetime.datetime.now()
+  dt = datetime.datetime.now(datetime.timezone.utc)
   local_timezone = tzlocal.get_localzone()
   dt = dt.astimezone(local_timezone)
   delta = datetime.timedelta(1)
