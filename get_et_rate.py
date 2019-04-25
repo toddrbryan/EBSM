@@ -66,11 +66,11 @@ def set_os_et(new_water_level):
   status = ""
   r = requests.get('http://192.168.1.13/jo?pw=' + hash)
   res = json.loads(r.text)
-  status = status + f"Old water level: {res['wl']}\n"
+  status = status + "Old water level: %s\n" % {res['wl']}
   r = requests.get('http://192.168.1.13/co?pw=%s&o23=%d' % (hash, new_water_level))
   r = requests.get('http://192.168.1.13/jo?pw=' + hash)
   res = json.loads(r.text)
-  status = status + f"Successfully set to new value {res['wl']}\n"
+  status = status + "Successfully set to new value %s\n" % {res['wl']}
   return status
 
 def notify(status):
