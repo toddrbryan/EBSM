@@ -4,8 +4,14 @@
 #define DIO0 7
 #define RESET 4
 #define SS 8
+#define VBATPIN A9
+#define LORA_FREQ 9147E5
+#define LORA_SF 12
+#define LORA_BW 250E3
+#define LORA_TX_POWER 20
+#define LORA_CODING_RATE 8
 
-#undef CONSOLE 1
+#define CONSOLE 1
 
 TinyGPS gps;
 unsigned long glat = 0;
@@ -23,31 +29,33 @@ void setup() {
   }    
 #endif
 
-  int s1 = 0;
   Serial1.begin(9600);
   while( !Serial1 ) {
     delay(1);
-    s1++;
-    #ifdef CONSOLE
-    if(s1 >= 50) {
-      Serial.println("Could not initialize Serial1 (GPS)");
-      exit(-1);
-    }
-    #endif
   }
  
   delay(250);
 
+  setup_LoRa();
+  setup_gps();
+
+  #ifdef CONSOLE
+  Serial.println("32u4 II LoRa Data Node");
+  #endif
+  blink(5);
+}
+
+void setup_LoRa() {
   LoRa.setPins(SS, RESET, DIO0);
-  LoRa.begin(9147E5);
-  LoRa.setSpreadingFactor(12);
-  LoRa.setTxPower(20);
-  LoRa.setSignalBandwidth(250E3);
-  LoRa.setCodingRate4(8);
+  LoRa.begin(LORA_FREQ);
+  LoRa.setSpreadingFactor(LORA_SF);
+  LoRa.setTxPower(LORA_TX_POWER);
+  LoRa.setSignalBandwidth(LORA_BW);
+  LoRa.setCodingRate4(LORA_CODING_RATE);
+}
 
+void setup_gps() {
   Serial1.println("$PSRF105,01*3E"); //DEBUG ON
-
-  //Serial.println((LoRa.begin(9147E5) == 1) ? "LoRa initialized on 914.7MHz" : "LoRa initialization error");
   Serial1.println("$PSRF104,34.4926,-119.8024,300,96000,167664,2098,12,08*30"); //full reset to factory defaults
 
   //Serial1.println("$PSRF105,0*3F"); //DEBUG OFF
@@ -59,12 +67,7 @@ void setup() {
 //  Serial1.println("$PSRF103,01,00,00,01*25"); //GLL OFF
 
   // Start 8 second delivery of RMC
-  Serial1.println("$PSRF103,04,00,8,01*21");
-
-  #ifdef CONSOLE
-  Serial.println("32u4 II LoRa TX Location");
-  #endif
-  blink(5);
+  //Serial1.println("$PSRF103,04,00,8,01*21");
 }
 
 static bool smartdelay(unsigned long ms)
@@ -89,15 +92,21 @@ static bool smartdelay(unsigned long ms)
 void loop() {
   smartdelay(30000);
   processGps();
+  read_battery_voltage();
+}
+
+int read_battery_voltage() {
+  float measuredvbat = analogRead(VBATPIN);
+  measuredvbat *= 2;    // we divided by 2, so multiply back
+  measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+  //measuredvbat /= 1024; // convert to voltage
+  #ifdef CONSOLE
+  Serial.print("VBat: " ); Serial.println(measuredvbat); Serial.println((int)measuredvbat);
+  #endif
+  return 0;
 }
 
 void transmit() {
-
-  int imonth = month;
-  int iday = day;
-  int ihour = hour;
-  int iminute = minute;
-  int isecond = second;
   byte *bptr = (byte *)&glon;
 
   buf[0] = bptr[3];
@@ -108,28 +117,25 @@ void transmit() {
   buf[4] = bptr[2];
   buf[5] = bptr[1];
 
-
-  
-  
-  //sprintf(buf, "%ld %ld %lu %d %d %d %d %d %d", glat, glon, fix_age, year, imonth, iday, ihour, iminute, isecond);
   #ifdef CONSOLE
-   Serial.println(glon);
-    Serial.println(glat);
-  for(int i = 0; i< 4; i++) {
-    Serial.print(((byte *)&glon)[i], HEX);
-    Serial.print(" ");
-  }
-  Serial.println();
-  for(int i = 0; i< 6; i++) {
-    Serial.print(buf[i], HEX);
-    Serial.print(" ");
-  }
-  Serial.println();
+  Serial.println(glon);
+  Serial.println(glat);
+//  for(int i = 0; i< 4; i++) {
+//    Serial.print(((byte *)&glon)[i], HEX);
+//    Serial.print(" ");
+//  }
+//  Serial.println();
+//  for(int i = 0; i< 6; i++) {
+//    Serial.print(buf[i], HEX);
+//    Serial.print(" ");
+//  }
+//  Serial.println();
   #endif
   LoRa.beginPacket();
-  for(int i = 0; i< 6; i++) {
-    LoRa.write(buf[i]);
-  }
+  LoRa.write(buf, 6);
+//  for(int i = 0; i< 6; i++) {
+//    LoRa.write(buf[i]);
+//  }
   LoRa.endPacket();
   #ifdef CONSOLE
   Serial.println("Sent LoRa packet");
@@ -142,12 +148,7 @@ void processGps() {
   unsigned long time, date, speed, course;
   unsigned long chars;
   unsigned short sentences, failed_checksum;
-  bool changed = false;
 
-  //Serial.println("Processing a sentence");
-  
-//  gps.crack_datetime(&year, &month, &day,
-//  &hour, &minute, &second, &hundredths, &fix_age);
   gps.get_position(&lat, &lon, &fix_age);
   blink(3);
   glat = lat;
